@@ -16,6 +16,15 @@ test-perf-count: prepare perf-count
 	./$(BUILDDIR)/perf-count
 	$(call test_msg, passed\n)
 
+$(BUILDDIR)/klog-demo: klog-demo.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+# require priviledge to run
+test-klog-demo: prepare klog-demo
+	$(call test_msg, started)
+	./$(BUILDDIR)/klog-demo
+	$(call test_msg, passed\n)
+
 prepare:
 	@mkdir -p $(BUILDDIR)
 
