@@ -1,1 +1,10 @@
 build/
+
+# kernel module
+*.o
+*.ko
+*.cmd
+*.mod
+*.mod.c
+modules.order
+Module.symvers

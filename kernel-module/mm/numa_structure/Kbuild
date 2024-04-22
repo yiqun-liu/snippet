@@ -1,0 +1,3 @@
+cflags_numa_node.o := -Werror -Wall -Wextra -fno-common
+
+obj-m += numa_node_show.o
