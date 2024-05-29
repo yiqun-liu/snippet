@@ -38,7 +38,7 @@ int write_kmesg(const char *str)
 {
 	FILE *fp = fopen("/dev/kmsg", "a");
 	if (fp == NULL) {
-		fprintf(stderr, "failed to open /dev/kmsg");
+		fprintf(stderr, "failed to open /dev/kmsg.\n");
 		return -1;
 	}
 	fprintf(fp, "%s\n", str);

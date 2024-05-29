@@ -1,6 +1,8 @@
 BUILDDIR = build
 VPATH = $(BUILDDIR)
 
+SUBDIRS = semaphore
+
 CC = gcc
 CFLAGS = -Wall -Wextra -Wfloat-equal -fno-common
 
@@ -28,10 +30,16 @@ test-klog-demo: prepare klog-demo
 prepare:
 	@mkdir -p $(BUILDDIR)
 
-test: test-perf-count
+test: test-perf-count test-klog-demo
+	for subdir in $(SUBDIRS) ; do \
+		$(MAKE) -C $$subdir $(@) ; \
+	done
 
 clean:
 	- rm -rf $(BUILDDIR)
+	for subdir in $(SUBDIRS) ; do \
+		$(MAKE) -C $$subdir $(@) ; \
+	done
 
 .PHONY: clean test prepare
 .DEFAULT_GOAL = test
