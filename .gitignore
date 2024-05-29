@@ -1,3 +1,4 @@
+# build output
 build/
 
 # kernel module
@@ -8,3 +9,6 @@ build/
 *.mod.c
 modules.order
 Module.symvers
+
+# build cache / LSP server index
+*cache*
