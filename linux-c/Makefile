@@ -27,6 +27,15 @@ test-klog-demo: prepare klog-demo
 	./$(BUILDDIR)/klog-demo
 	$(call test_msg, passed\n)
 
+$(BUILDDIR)/va-to-pa: va-to-pa.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+# require priviledge to run
+test-va-to-pa: prepare va-to-pa
+	$(call test_msg, started)
+	timeout --signal=INT --preserve-status 1s ./$(BUILDDIR)/va-to-pa
+	$(call test_msg, passed\n)
+
 prepare:
 	@mkdir -p $(BUILDDIR)
 
