@@ -36,10 +36,18 @@ test-va-to-pa: prepare va-to-pa
 	timeout --signal=INT --preserve-status 1s ./$(BUILDDIR)/va-to-pa
 	$(call test_msg, passed\n)
 
+$(BUILDDIR)/libnuma-demo: libnuma-demo.c
+	$(CC) $(CFLAGS) -o $@ $< -lnuma
+
+test-libnuma-demo: prepare libnuma-demo
+	$(call test_msg, started)
+	./$(BUILDDIR)/libnuma-demo
+	$(call test_msg, passed\n)
+
 prepare:
 	@mkdir -p $(BUILDDIR)
 
-test: test-perf-count test-klog-demo
+test: test-perf-count test-libnuma-demo test-klog-demo test-va-to-pa
 	for subdir in $(SUBDIRS) ; do \
 		$(MAKE) -C $$subdir $(@) ; \
 	done
