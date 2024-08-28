@@ -14,6 +14,9 @@ $(BUILDDIR)/struct-demo: struct-demo.c
 $(BUILDDIR)/union-demo: union-demo.c
 	$(CC) $(CFLAGS) -o $@ $<
 
+$(BUILDDIR)/stdio-demo: stdio-demo.c
+	$(CC) $(CFLAGS) -o $@ $<
+
 test-struct-demo: prepare struct-demo
 	$(call test_msg, started)
 	./$(BUILDDIR)/struct-demo
@@ -24,10 +27,15 @@ test-union-demo: prepare union-demo
 	./$(BUILDDIR)/union-demo
 	$(call test_msg, passed\n)
 
+test-stdio-demo: prepare stdio-demo
+	$(call test_msg, started)
+	./$(BUILDDIR)/stdio-demo
+	$(call test_msg, passed\n)
+
 prepare:
 	@mkdir -p $(BUILDDIR)
 
-test: test-struct-demo test-union-demo
+test: test-struct-demo test-union-demo test-stdio-demo
 
 clean:
 	- rm -rf $(BUILDDIR)
