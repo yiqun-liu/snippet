@@ -44,10 +44,27 @@ test-libnuma-demo: prepare libnuma-demo
 	./$(BUILDDIR)/libnuma-demo
 	$(call test_msg, passed\n)
 
+$(BUILDDIR)/shell-cmd-in-c: shell-cmd-in-c.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+test-shell-cmd-in-c: prepare shell-cmd-in-c
+	$(call test_msg, started)
+	./$(BUILDDIR)/shell-cmd-in-c
+	$(call test_msg, passed\n)
+
+$(BUILDDIR)/sysfs-parser: sysfs-parser.c
+	$(CC) $(CFLAGS) -o $@ $<
+
+test-sysfs-parser: prepare sysfs-parser
+	$(call test_msg, started)
+	./$(BUILDDIR)/sysfs-parser
+	$(call test_msg, passed\n)
+
 prepare:
 	@mkdir -p $(BUILDDIR)
 
-test: test-perf-count test-libnuma-demo test-klog-demo test-va-to-pa
+test: test-perf-count test-libnuma-demo test-klog-demo test-va-to-pa test-shell-cmd-in-c \
+	test-sysfs-parser
 	for subdir in $(SUBDIRS) ; do \
 		$(MAKE) -C $$subdir $(@) ; \
 	done
