@@ -1,0 +1,8 @@
+config INTERNAL_DEMO
+	tristate "In-tree component kunit demo: the code to be tested"
+	default y
+
+config INTERNAL_DEMO_KUNIT_TESTS
+	tristate "In-tree component kunit demo: the testing code" if !KUNIT_ALL_TESTS
+	depends on INTERNAL_DEMO && KUNIT
+	default KUNIT_ALL_TESTS

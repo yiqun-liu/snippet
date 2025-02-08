@@ -1,0 +1,5 @@
+cflags_dynamic_demo_test.o := -Werror -Wall -Wextra -fno-common
+
+KBUILD_EXTRA_SYMBOLS += ${DYNAMIC_DEMO_SYMBOLS}
+
+obj-m += dynamic_demo_test.o

@@ -1,0 +1,8 @@
+cflags_static_demo.o := -Werror -Wall -Wextra -fno-common
+
+# enable kunit test if "make" command is run with "KUNIT=1"
+ifeq ($(KUNIT), 1)
+	ccflags-y += -DDEMO_KUNIT_TESTS
+endif
+
+obj-m += static_demo.o
