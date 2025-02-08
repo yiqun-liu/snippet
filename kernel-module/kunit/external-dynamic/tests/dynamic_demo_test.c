@@ -1,5 +1,4 @@
-/* TODO this source, make file for production and test version, SMMU v3 for ref
- *
+/*
  * A demo of Linux KUnit tests for external kernel modules.
  * This source file contains the KUnit test cases and is stactically linked with the function code.
  *
@@ -9,6 +8,7 @@
  */
 
 #include <kunit/test.h>
+#include <kunit/static_stub.h>
 #include "../dynamic_demo.h"
 
 /* statically linked tests can test static functions in production code */
@@ -25,9 +25,47 @@ static void demo_exported_shift_right_test(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, 2, demo_exported_shift_right(4, 1));
 }
 
+static int fake_demo_inner_function_abs(int param)
+{
+	return param < 0 ? -param : param;
+}
+
+int identity_called = 0;
+static int fake_demo_inner_function_identity(int param)
+{
+	identity_called++;
+	return param;
+}
+
+static void demo_outer_function_test(struct kunit *test)
+{
+	KUNIT_EXPECT_EQ(test, -ENOSYS, demo_outer_function(-10));
+	KUNIT_EXPECT_EQ(test, -ENOSYS, demo_outer_function(0));
+	KUNIT_EXPECT_EQ(test, -ENOSYS, demo_outer_function(10));
+
+	kunit_activate_static_stub(test, demo_inner_function, fake_demo_inner_function_abs);
+	KUNIT_EXPECT_EQ(test, 0, demo_outer_function(-10));
+	KUNIT_EXPECT_EQ(test, 0, demo_outer_function(0));
+	KUNIT_EXPECT_EQ(test, 0, demo_outer_function(10));
+	kunit_deactivate_static_stub(test, demo_inner_function);
+
+	kunit_activate_static_stub(test, demo_inner_function, fake_demo_inner_function_identity);
+	identity_called = 0;
+	KUNIT_EXPECT_EQ(test, -10, demo_outer_function(-10));
+	KUNIT_EXPECT_EQ(test, 1, identity_called);
+	identity_called = 0;
+	KUNIT_EXPECT_EQ(test, 0, demo_outer_function(0));
+	KUNIT_EXPECT_EQ(test, 1, identity_called);
+	identity_called = 0;
+	KUNIT_EXPECT_EQ(test, 0, demo_outer_function(10));
+	KUNIT_EXPECT_EQ(test, 1, identity_called);
+	kunit_deactivate_static_stub(test, demo_inner_function);
+}
+
 static struct kunit_case demo_test_cases[] = {
 	KUNIT_CASE(demo_static_shift_left_test),
 	KUNIT_CASE(demo_exported_shift_right_test),
+	KUNIT_CASE(demo_outer_function_test),
 	{}
 };
 

@@ -1,5 +1,4 @@
-/* TODO this source, make file for production and test version, SMMU v3 for ref
- *
+/*
  * A demo of Linux KUnit tests for external kernel modules.
  * This source file contains the KUnit test cases and is stactically linked with the function code.
  *
