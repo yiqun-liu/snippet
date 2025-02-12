@@ -18,3 +18,14 @@ socket type
   * similar to a pair of pipes
 * `SOCK_DGRAM`: connectionless, unrelable (out or order, duplicate and missing) datagram
   * use UDP in `INET` & `INET6` domain
+
+system calls
+* `socket()`: create a new socket
+* `bind()`: bind a socket to an address
+* stream socket:
+  * `listen()`: wait for incoming connections (server)
+  * `accept()`: accept an incoming connection (server)
+  * `connect(): try to establish a connection (client)
+* socket IO
+  * general system calls: `read()`, `write()`
+  * socket-specific system calls: `send()`, `recv()`, `sendto()`, `recvfrom()`
