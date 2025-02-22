@@ -22,6 +22,7 @@ socket type
   * use UDP in `INET` & `INET6` domain
   * exception: in UNIX domain the delivery is in-order and reliable
   * always read one datagram; silently truncate the datagram when the buffer is not big enough
+* `SOCK_RAW`: raw socket which allow applications to communicate directly on IP protocol
 
 operations
 * `socket()`: create a new socket and return the "sockfd" file descriptor
@@ -82,3 +83,96 @@ other utilities
 * when the socket is no longer required, user should remove it with `unlink()` or `remove()`
 * `bind()` creates socket file, whose permission can be adjusted by `umask()`
 * socket file permissions: stream socket connect and datagram write require "write" permission
+
+### Internet domain
+
+* `INADDR_LOOPBACK`: one of the IPv4 loopback address `127.0.0.1`
+* `INADDR_ANY`: IPv4 wildcard address (implementation-defined `0.0.0.0`)
+  * used in filters to specify that packets sent to all IPs of this hosts are accepted
+
+ports
+* port taxonomy by Internet Assigned Numbers Authority (IANA)
+  * well known ports: strictly managed by IANA, 0 to 1023
+  * registered ports: managed loosenly by IANA, a subset of 1024 to 41951
+  * well known ports are treated as privileged ports in TCP/IP implementation (
+    `CAP_NET_BIND_SERVICE` required)
+  * dynamic / private ports: always managed by the local OS, 49152 to 65535
+* the TCP and UDP ports with the same port number are distinct entities, but in practice they are
+  almost always assigned to one service to avoid confusions
+* when a process bind itself to port 0, a ephemeral port will be assigned
+  * `/proc/sys/net/ipv4/ip_local_port_range`
+
+## Protocols
+
+UDP
+* features
+  * connectionless & unreliable: same as IP
+  * port number support
+  * data checksum: 16 bits add-up checksum (weak)
+* UDP has no IP fragmentation support, so the application must make sure the packet needs not to be
+  fragmentated
+  * IPv4 minimum reassembly buffer size: 576 bytes
+  * UDP header: 8 bytes
+  * IPv4 header: 20 bytes
+  * the payload should be no more than 548 bytes if it has no information about minimum path MTU
+
+TCP
+* TCP endpoint: TCP information maintained in the kernel
+  * state info
+  * send buffer
+  * receive buffer
+* featuress
+  * connection-oriented: connection establishment and parameter negotiation required
+  * reliable: sequencing, acknowgement, retransmission and timeouts supported
+  * fragmentation support: data is broken into segments and each of which contains a checksum
+  * congestion control
+
+## Utilities
+
+### Byte Order
+
+most network-specific functions accept and return values in network byte order
+
+network byte order - host byte order conversion
+it is a good practice to use such conversion no matter what endian your host machine has
+```c
+/* <arpa/inet.h> */
+uint16_t htons(uint16_t host_uint16);
+uint16_t ntohs(uint16_t host_uint16);
+/* NOTE the l (long) suffix refers to 32-bit for historical reasons */
+uint32_t htonl(uint32_t host_uint32);
+uint32_t ntohl(uint32_t host_uint32);
+```
+
+marshalling (data serialization)
+* examples: XDR, XML or ASCII text (telnet)
+
+### Representations
+
+* binary values
+  * IPv4 address: 32-bit value
+  * IPv6 address: 128-bit value
+* symbolic names
+  * hostname: machine identifier, which possibly has multiple IP addresses
+  * service name: a symbolic representation of a port number (of a certain host?)
+* presentation format
+  * IPv4: dotted decimals like 127.0.0.1
+  * IPv6: colon-separated hex strings
+
+conversions
+* binary representation & presentation format
+  * a stands for ascii string; n stands for network, p stands fro presentation format
+  * IPv4: `inet_aton` and `inet_ntoa` (deprecated)
+  * IPv4 & IPv6: `inet_pton` and `inet_ntop`
+* binary representation & symbolic names
+  * IP: `gethostbyname` (deprecated), `gethostbyaddr` (deprecated)
+  * port: `getservbyname` (deprecated), `getservbyport` (deprecated)
+  * IP & port: `getaddrinfo()`, `getnameinfo()`
+
+```c
+/* ascii / characters (dotted-decimals) --> network (IPv4) address; (ntoa deprecated) */
+int inet_aton(const char *cp, struct in_addr *inp);
+/* ascii / characters (dotted-decimals) <--> presentation fromat (IPv4 or IPv6) */
+int inet_pton(int af, const char *src, void *dst);
+int inet_ntop(int af, const char *src, char *dst, socklen_t size);
+```
