@@ -1,5 +1,5 @@
 /*
- * This header provides simple public constants and constant shared by the client and server.
+ * This header provides simple public constants and utilities shared by the client and server.
  */
 #ifndef UNIX_SOCKET_DEMO_H
 #define UNIX_SOCKET_DEMO_H

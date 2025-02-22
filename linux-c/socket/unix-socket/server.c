@@ -32,7 +32,7 @@ static int run_stream_server()
 	if (ret == -1) {
 		fprintf(stderr, "server failed to bind socket fd %d to addr %s: %s\n", sock_fd,
 			SERVER_STREAM_SOCKET_PATH, strerror(errno));
-		goto out_close;
+		goto out_close_server_sock;
 	}
 
 	/* start waiting for connections */
@@ -50,7 +50,7 @@ static int run_stream_server()
 	client_addrlen = sizeof(client_addr);
 	ret = accept(sock_fd, (struct sockaddr *)&client_addr, &client_addrlen);
 	if (ret == -1) {
-		fprintf(stderr, "failed to accept a socket: %s.\n", strerror(errno));
+		fprintf(stderr, "failed to accept connection from socket: %s.\n", strerror(errno));
 		goto out_unlink;
 	}
 	conn_fd = ret;
@@ -65,11 +65,11 @@ static int run_stream_server()
 		fprintf(stderr, "server(pid=%d): failed to read from connection %d: %s.\n",
 			getpid(), conn_fd, strerror(errno));
 		ret = -1;
-		goto out_unlink;
+		goto out_close_conn_sock;
 	} else if (num_bytes == 0) {
 		fprintf(stderr, "server(pid=%d): got empty data.\n", getpid());
 		ret = -1;
-		goto out_unlink;
+		goto out_close_conn_sock;
 	}
 
 	printf("server(pid=%d): received data (%zd bytes) \"%s\".\n", getpid(), num_bytes,
@@ -77,7 +77,7 @@ static int run_stream_server()
 	if (strncmp(CLIENT_REQ_MSG, data_buffer, strlen(CLIENT_REQ_MSG) + 1) != 0) {
 		fprintf(stderr, "server(pid=%d): unexpected data received.\n", getpid());
 		ret = -1;
-		goto out_unlink;
+		goto out_close_conn_sock;
 	}
 
 	/* write to client the "ACK" */
@@ -87,22 +87,24 @@ static int run_stream_server()
 		fprintf(stderr, "server(pid=%d): failed to write to connection %d: %s.\n",
 			getpid(), conn_fd, strerror(errno));
 		ret = -1;
-		goto out_unlink;
+		goto out_close_conn_sock;
 	} else if (num_bytes != strlen(SERVER_ACK_MSG) + 1) {
 		fprintf(stderr, "server -> client: failed to write full data, wrote %zd bytes, "
 			"expect %zd bytes.\n", num_bytes, strlen(SERVER_ACK_MSG) + 1);
 		ret = -1;
-		goto out_unlink;
+		goto out_close_conn_sock;
 	}
 	printf("server(pid=%d): %s terminated exepctedly.\n", getpid(), __func__);
 	ret = 0;
 
+out_close_conn_sock:
+	close(conn_fd);
 out_unlink:
 	if (unlink(SERVER_STREAM_SOCKET_PATH) == -1) {
 		fprintf(stderr, "server failed to remove socket file: %s\n", strerror(errno));
 		ret = ret ? ret : -1;
 	}
-out_close:
+out_close_server_sock:
 	close(sock_fd);
 	return ret;
 }
