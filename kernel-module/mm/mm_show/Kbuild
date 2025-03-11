@@ -1,0 +1,5 @@
+ccflags-y := -Werror -Wall -Wextra -fno-common
+
+mm_show-objs := core.o numa_show.o va_map_show.o
+
+obj-m += mm_show.o

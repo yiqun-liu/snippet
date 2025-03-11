@@ -3,13 +3,12 @@
  * The locking rules have not been examined in details so there may be some concurrency risks
  */
 
-#include <linux/init.h>
-#include <linux/module.h>
-
 #include <linux/mmzone.h>
 
+#include "mm_show.h"
+
 #undef pr_fmt
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#define pr_fmt(fmt) "numa_show: " fmt
 
 /* backward-compatibility */
 #ifndef MAX_PAGE_ORDER
@@ -130,7 +129,7 @@ static void show_node_states(void)
 
 #ifndef CONFIG_NUMA
 extern struct pglist_data contig_page_data;
-static void show_all(void)
+void numa_show(void)
 {
 	pr_info("[UMA-SHOW]: start");
 	show_node_states();
@@ -142,7 +141,7 @@ static void show_all(void)
 }
 #else
 extern struct pglist_data *node_data[];
-static void show_all(void)
+void numa_show(void)
 {
 	pr_info("[NUMA-SHOW]: start");
 	show_node_states();
@@ -152,22 +151,3 @@ static void show_all(void)
 	pr_info("[NUMA-SHOW]: end\n");
 }
 #endif
-
-static int __init numa_show_demo_init(void)
-{
-	show_all();
-	/* we do not really need the module to be plugged in */
-	return -EPERM;
-}
-
-static void __exit numa_show_demo_exit(void)
-{
-	return;
-}
-
-module_init(numa_show_demo_init);
-module_exit(numa_show_demo_exit);
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Yiqun Liu <yiqun.liu.dev@outlook.com>");
-MODULE_DESCRIPTION("A demo of NUMA-related data structure accessor");
