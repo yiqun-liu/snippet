@@ -1,0 +1,3 @@
+ccflags-y := -Werror -Wall -Wextra -fno-common
+
+obj-m += page_table_walker.o
