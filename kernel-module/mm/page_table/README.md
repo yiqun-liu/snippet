@@ -8,3 +8,4 @@ stack variables and mmaped pages (fresh, read and written).
 
 References
 - mm/gup.c: follow_page_mask
+- mm/pagewalk.c
