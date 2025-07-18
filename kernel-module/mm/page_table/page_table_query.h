@@ -10,12 +10,15 @@ struct page_table_query {
 	__u64 va;
 
 	/* filled by kernel module */
+	/* the number of translation levels walked through */
+	__u32 num_levels;
 	/* kernel linear addresses */
-	__u64 pgd_kla;
-	__u64 p4d_kla;
-	__u64 pud_kla;
-	__u64 pmd_kla;
-	__u64 pte_kla;
+	__u64 pgd_table_kla;
+	__u64 pgd_entry_kla;
+	__u64 p4d_entry_kla;
+	__u64 pud_entry_kla;
+	__u64 pmd_entry_kla;
+	__u64 pte_entry_kla;
 	/* translation entry value */
 	__u64 p4d_entry;
 	__u64 pud_entry;
