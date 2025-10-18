@@ -63,7 +63,7 @@ int fill_sockaddr_in(struct sockaddr_in *sock_addr, const char *ip, uint16_t por
 	memset(sock_addr, 0, sizeof(struct sockaddr_in));
 	sock_addr->sin_family = AF_INET;
 	sock_addr->sin_port = htons(port);
-	if (sock_addr == NULL) {
+	if (ip == NULL) {
 		sock_addr->sin_addr.s_addr = INADDR_ANY;
 	} else {
 		/* dotted decimals presentation to network strucutre; return 1 on success */
@@ -122,7 +122,7 @@ int inet4_listen(const struct sockaddr_in *sock_addr, int sock_type, int backlog
 
 	sock_fd = socket(AF_INET, sock_type, 0);
 	if (sock_fd == -1) {
-		fprintf(stderr, "failed to create socktet: %s.\n", strerror(errno));
+		fprintf(stderr, "failed to create socket: %s.\n", strerror(errno));
 		return -1;
 	}
 
@@ -130,14 +130,14 @@ int inet4_listen(const struct sockaddr_in *sock_addr, int sock_type, int backlog
 	ret = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &socket_option_value,
 		sizeof(socket_option_value));
 	if (ret == -1) {
-		fprintf(stderr, "failed to configure socktet: %s.\n", strerror(errno));
+		fprintf(stderr, "failed to configure socket: %s.\n", strerror(errno));
 		close(sock_fd);
 		return -1;
 	}
 
 	ret = bind(sock_fd, (struct sockaddr*)sock_addr, sizeof(struct sockaddr_in));
 	if (ret == -1) {
-		fprintf(stderr, "failed to bind socktet: %s.\n", strerror(errno));
+		fprintf(stderr, "failed to bind socket: %s.\n", strerror(errno));
 		close(sock_fd);
 		return -1;
 	}
@@ -159,13 +159,13 @@ int inet4_connect(const struct sockaddr_in *sock_addr, int sock_type)
 
 	sock_fd = socket(AF_INET, sock_type, 0);
 	if (sock_fd == -1) {
-		fprintf(stderr, "failed to create socktet: %s.\n", strerror(errno));
+		fprintf(stderr, "failed to create socket: %s.\n", strerror(errno));
 		return -1;
 	}
 
 	ret = connect(sock_fd, (struct sockaddr*)sock_addr, sizeof(struct sockaddr_in));
 	if (ret == -1) {
-		fprintf(stderr, "failed to connect to socktet: %s.\n", strerror(errno));
+		fprintf(stderr, "failed to connect to socket: %s.\n", strerror(errno));
 		close(sock_fd);
 		return -1;
 	}
@@ -216,7 +216,7 @@ int inet4_listen_str(int sock_type, const char *service, int backlog)
 			continue;
 		sock_fd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
 		if (sock_fd == -1) {
-			fprintf(stderr, "failed to create socktet: %s. Try next\n",
+			fprintf(stderr, "failed to create socket: %s. Try next\n",
 				strerror(errno));
 			continue;
 		}
@@ -224,7 +224,7 @@ int inet4_listen_str(int sock_type, const char *service, int backlog)
 		ret = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &socket_option_value,
 			sizeof(socket_option_value));
 		if (ret == -1) {
-			fprintf(stderr, "failed to configure socktet: %s. Try next\n",
+			fprintf(stderr, "failed to configure socket: %s. Try next\n",
 				strerror(errno));
 			close(sock_fd);
 			sock_fd = -1;
@@ -232,7 +232,7 @@ int inet4_listen_str(int sock_type, const char *service, int backlog)
 
 		ret = bind(sock_fd, address->ai_addr, address->ai_addrlen);
 		if (ret == -1) {
-			fprintf(stderr, "failed to bind socktet: %s. Try next\n",
+			fprintf(stderr, "failed to bind socket: %s. Try next\n",
 				strerror(errno));
 			close(sock_fd);
 			sock_fd = -1;
@@ -293,14 +293,14 @@ int inet4_connect_str(int sock_type, const char *host, const char *service)
 			continue;
 		sock_fd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
 		if (sock_fd == -1) {
-			fprintf(stderr, "failed to create socktet: %s. Try next\n",
+			fprintf(stderr, "failed to create socket: %s. Try next\n",
 				strerror(errno));
 			continue;
 		}
 
 		ret = connect(sock_fd, address->ai_addr, address->ai_addrlen);
 		if (ret == -1) {
-			fprintf(stderr, "failed to connect to socktet: %s. Try next\n",
+			fprintf(stderr, "failed to connect to socket: %s. Try next\n",
 				strerror(errno));
 			close(sock_fd);
 			sock_fd = -1;
