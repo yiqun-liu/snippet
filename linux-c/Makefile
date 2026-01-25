@@ -1,7 +1,7 @@
 BUILDDIR = build
 VPATH = $(BUILDDIR)
 
-SUBDIRS = semaphore
+SUBDIRS = semaphore config-demo
 
 CC = gcc
 CFLAGS = -Wall -Wextra -Wfloat-equal -fno-common
