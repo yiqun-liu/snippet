@@ -7,7 +7,11 @@ NOTE: AArch64 does not allow mapping a memory location with different memory att
 
 ## Features
 
-- Large memory allocations using vmalloc (handles GB-scale)
+- Page allocations from kernel buddy allocator (order-0 pages)
+- NUMA-aware allocation respecting process mempolicy
+  - Supports: MPOL_DEFAULT, MPOL_LOCAL, MPOL_PREFERRED
+  - Rejects: MPOL_INTERLEAVE, MPOL_BIND with error
+  - Falls back gracefully on non-NUMA systems
 - Three memory attributes (set at module load):
   - `normal_cacheable`: Standard cached memory
   - `normal_noncacheable`: Write-combining (weakly ordered)
@@ -87,9 +91,9 @@ Refuses if mappings still active.
 
 ### Memory Allocation
 
-- Uses `vmalloc_user()` for user-space mappable memory
-- `remap_vmalloc_range()` for cacheable mappings
-- `vm_insert_pages()` with custom pgprot for non-cacheable
+- Uses `alloc_pages_bulk_array_node()` for NUMA-aware page allocation from buddy allocator
+- `vm_insert_pages()` for user-space mapping with configurable cache attributes
+- Falls back to single-node allocation on non-NUMA kernels
 
 ### Tracking
 

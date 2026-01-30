@@ -8,13 +8,17 @@
 #include <linux/device.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
-#include <linux/vmalloc.h>
 #include <linux/types.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/atomic.h>
 #include <linux/string.h>
 #include <uapi/asm-generic/errno-base.h>
+
+#ifdef CONFIG_NUMA
+#include <linux/numa.h>
+#include <linux/mempolicy.h>
+#endif
 
 #define DEVICE_NAME		 "memdev"
 #define DEVICE_PATH		 "/dev/memdev"
@@ -29,7 +33,8 @@ struct mapped_region {
 	pid_t pid;
 	unsigned long user_va;
 	size_t size;
-	void *kernel_va;
+	struct page **pages;
+	unsigned long npages;
 	struct list_head list;
 };
 
@@ -54,6 +59,24 @@ static DEFINE_MUTEX(dev_lock);
 
 static atomic_t mapped_count = ATOMIC_INIT(0);
 
+#ifdef CONFIG_NUMA
+static bool numa_enabled;
+#endif
+
+static int get_allocation_node(struct mempolicy *policy)
+{
+	int mode = policy ? policy->mode : MPOL_DEFAULT;
+
+	switch (mode) {
+	case MPOL_DEFAULT:
+	case MPOL_LOCAL:
+	case MPOL_PREFERRED:
+		return cpu_to_node(get_cpu());
+	default:
+		return -EINVAL;
+	}
+}
+
 static pgprot_t get_pgprot(enum prot_type prot)
 {
 	pgprot_t prot_val = vm_get_page_prot(VM_READ | VM_WRITE);
@@ -71,34 +94,30 @@ static pgprot_t get_pgprot(enum prot_type prot)
 
 static void free_mapped_region(struct mapped_region *region)
 {
-	if (region->kernel_va)
-		vfree(region->kernel_va);
+	unsigned long i;
+
+	for (i = 0; i < region->npages; i++) {
+		__free_page(region->pages[i]);
+		if ((i + 1) % 256 == 0)
+			cond_resched();
+	}
+	kvfree(region->pages);
 	kfree(region);
 	atomic_dec(&mapped_count);
 }
 
-static int map_vmalloc_range(struct vm_area_struct *vma, void *addr,
-				 size_t size, pgprot_t prot)
+static int map_pages_to_vma(struct vm_area_struct *vma, struct page **pages,
+			    size_t size, pgprot_t prot)
 {
-	unsigned long i, npages, npages_unmap;
-	struct page **pages;
+	unsigned long npages = size / PAGE_SIZE;
+	unsigned long npages_unmap = npages;
 	int ret;
 
-	npages = size / PAGE_SIZE;
-	pages = kvmalloc_array(npages, sizeof(struct page *), GFP_KERNEL);
-	if (!pages)
-		return -ENOMEM;
-
-	for (i = 0; i < npages; i++)
-		pages[i] = vmalloc_to_page(addr + i * PAGE_SIZE);
-
 	vma->vm_page_prot = prot;
-	npages_unmap = npages;
 	ret = vm_insert_pages(vma, vma->vm_start, pages, &npages_unmap);
 	if (ret)
-		pr_err("%lu of %lu failed to be mapped.\n", npages_unmap, npages);
+		pr_err("%lu of %lu pages failed to be mapped.\n", npages_unmap, npages);
 
-	kvfree(pages);
 	return ret;
 }
 
@@ -186,51 +205,67 @@ static int memdev_mmap(struct file *filp, struct vm_area_struct *vma)
 {
 	struct file_state *state = filp->private_data;
 	struct mapped_region *region;
-	size_t size;
-	void *addr;
-	int ret;
+	size_t size = vma->vm_end - vma->vm_start;
+	struct page **pages;
+	unsigned long npages, nr_allocated;
+	int ret, node;
 	pid_t pid;
-
-	size = vma->vm_end - vma->vm_start;
 
 	if (size == 0 || (size % PAGE_SIZE) != 0) {
 		pr_err("invalid size %zu\n", size);
 		return -EINVAL;
 	}
 
-	addr = vmalloc_user(size);
-	if (!addr) {
-		pr_err("failed to allocate %zu bytes\n", size);
+	npages = size / PAGE_SIZE;
+	node = cpu_to_node(get_cpu());
+
+#ifdef CONFIG_NUMA
+	if (numa_enabled) {
+		struct mempolicy *policy = vma->vm_policy;
+
+		node = get_allocation_node(policy);
+		if (node < 0) {
+			pr_err("mmap rejected: unsupported mempolicy (mode=%d)\n",
+				policy ? policy->mode : MPOL_DEFAULT);
+			return -EOPNOTSUPP;
+		}
+	}
+#endif
+
+	pages = kvmalloc_array(npages, sizeof(struct page *), GFP_KERNEL);
+	if (!pages) {
+		pr_err("failed to allocate page array\n");
 		return -ENOMEM;
 	}
 
-	memset(addr, 0, size);
-
-	if (g_prot == PROT_CACHEABLE) {
-		ret = remap_vmalloc_range(vma, addr, 0);
-	} else {
-		pgprot_t prot = get_pgprot(g_prot);
-		ret = map_vmalloc_range(vma, addr, size, prot);
+	nr_allocated = 0;
+	nr_allocated = alloc_pages_bulk_array_node(GFP_KERNEL, node, npages, pages);
+	if (nr_allocated != npages) {
+		pr_err("bulk allocation failed: got %lu of %lu pages\n",
+			nr_allocated, npages);
+		ret = -ENOMEM;
+		goto err_free_pages;
 	}
 
+	ret = map_pages_to_vma(vma, pages, size, get_pgprot(g_prot));
 	if (ret) {
-		pr_err("failed to map memory: %d\n", ret);
-		vfree(addr);
-		return ret;
+		pr_err("failed to map pages: %d\n", ret);
+		goto err_free_pages;
 	}
 
 	region = kzalloc(sizeof(*region), GFP_KERNEL);
 	if (!region) {
 		pr_err("failed to allocate region\n");
-		vfree(addr);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err_free_pages;
 	}
 
 	pid = task_pid_nr(current->group_leader);
 	region->pid = pid;
 	region->user_va = vma->vm_start;
 	region->size = size;
-	region->kernel_va = addr;
+	region->pages = pages;
+	region->npages = npages;
 	INIT_LIST_HEAD(&region->list);
 
 	mutex_lock(&dev_lock);
@@ -242,8 +277,15 @@ static int memdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	vma->vm_private_data = region;
 	vma->vm_ops = &memdev_vm_ops;
 
-	pr_info("mapped region pid=%d va=%#lx size=%#zx\n", pid, region->user_va, region->size);
+	pr_info("mapped region pid=%d va=%#lx size=%#zx node=%d\n",
+		pid, region->user_va, region->size, node);
 	return 0;
+
+err_free_pages:
+	while (nr_allocated-- > 0)
+		__free_page(pages[nr_allocated]);
+	kvfree(pages);
+	return ret;
 }
 
 static long memdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
@@ -263,6 +305,12 @@ static const struct file_operations memdev_fops = {
 static int __init memdev_init(void)
 {
 	int ret;
+
+#ifdef CONFIG_NUMA
+	numa_enabled = (num_possible_nodes() > 1);
+#else
+	numa_enabled = false;
+#endif
 
 	if (strcmp(memdev_attr, "normal_cacheable") == 0) {
 		g_prot = PROT_CACHEABLE;
@@ -304,8 +352,9 @@ static int __init memdev_init(void)
 		goto err_device_create;
 	}
 
-	pr_info("initialized, device at %s (attr=%s, mapped_count=%d)\n",
-		DEVICE_PATH, memdev_attr, atomic_read(&mapped_count));
+	pr_info("initialized, device at %s (attr=%s, numa=%s, mapped_count=%d)\n",
+		DEVICE_PATH, memdev_attr, numa_enabled ? "enabled" : "disabled",
+		atomic_read(&mapped_count));
 	return 0;
 
 err_device_create:
