@@ -1,3 +1,6 @@
+/*
+ * reference: mm/vmalloc.c:vm_area_alloc_pages()
+ */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/module.h>
@@ -34,7 +37,7 @@ struct mapped_region {
 	unsigned long user_va;
 	size_t size;
 	struct page **pages;
-	unsigned long npages;
+	unsigned long nr_pages;
 	struct list_head list;
 };
 
@@ -59,9 +62,7 @@ static DEFINE_MUTEX(dev_lock);
 
 static atomic_t mapped_count = ATOMIC_INIT(0);
 
-#ifdef CONFIG_NUMA
 static bool numa_enabled;
-#endif
 
 static int get_allocation_node(struct mempolicy *policy)
 {
@@ -77,18 +78,20 @@ static int get_allocation_node(struct mempolicy *policy)
 	}
 }
 
-static pgprot_t get_pgprot(enum prot_type prot)
+static void apply_pgprot(enum prot_type prot, pgprot_t *prot_ptr)
 {
-	pgprot_t prot_val = vm_get_page_prot(VM_READ | VM_WRITE);
 	switch (prot) {
 	case PROT_WRITECOMBINE:
-		return pgprot_writecombine(prot_val);
+		*prot_ptr = pgprot_writecombine(*prot_ptr);
+		break;
 	case PROT_UNCACHED:
-		return pgprot_noncached(prot_val);
+		*prot_ptr = pgprot_noncached(*prot_ptr);
+		break;
 	case PROT_CACHEABLE:
 		/* fallthrough */
 	default:
-		return prot_val;
+		/* No modification needed - keep default */
+		break;
 	}
 }
 
@@ -96,7 +99,7 @@ static void free_mapped_region(struct mapped_region *region)
 {
 	unsigned long i;
 
-	for (i = 0; i < region->npages; i++) {
+	for (i = 0; i < region->nr_pages; i++) {
 		__free_page(region->pages[i]);
 		if ((i + 1) % 256 == 0)
 			cond_resched();
@@ -109,14 +112,15 @@ static void free_mapped_region(struct mapped_region *region)
 static int map_pages_to_vma(struct vm_area_struct *vma, struct page **pages,
 			    size_t size, pgprot_t prot)
 {
-	unsigned long npages = size / PAGE_SIZE;
-	unsigned long npages_unmap = npages;
+	unsigned long nr_pages = size / PAGE_SIZE;
+	unsigned long nr_pages_unmap = nr_pages;
 	int ret;
 
+	pr_info("map_pages_to_vma: prot=%llx\n", (unsigned long long)pgprot_val(prot));
 	vma->vm_page_prot = prot;
-	ret = vm_insert_pages(vma, vma->vm_start, pages, &npages_unmap);
+	ret = vm_insert_pages(vma, vma->vm_start, pages, &nr_pages_unmap);
 	if (ret)
-		pr_err("%lu of %lu pages failed to be mapped.\n", npages_unmap, npages);
+		pr_err("%lu of %lu pages failed to be mapped.\n", nr_pages_unmap, nr_pages);
 
 	return ret;
 }
@@ -207,7 +211,7 @@ static int memdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	struct mapped_region *region;
 	size_t size = vma->vm_end - vma->vm_start;
 	struct page **pages;
-	unsigned long npages, nr_allocated;
+	unsigned long nr_pages, nr_allocated;
 	int ret, node;
 	pid_t pid;
 
@@ -216,10 +220,9 @@ static int memdev_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
-	npages = size / PAGE_SIZE;
+	nr_pages = size / PAGE_SIZE;
 	node = cpu_to_node(get_cpu());
 
-#ifdef CONFIG_NUMA
 	if (numa_enabled) {
 		struct mempolicy *policy = vma->vm_policy;
 
@@ -230,24 +233,49 @@ static int memdev_mmap(struct file *filp, struct vm_area_struct *vma)
 			return -EOPNOTSUPP;
 		}
 	}
-#endif
 
-	pages = kvmalloc_array(npages, sizeof(struct page *), GFP_KERNEL);
+	/* NOTE: alloc_pages_bulk family requires a zeroed-out page array */
+	pages = kvcalloc(nr_pages, sizeof(struct page *), GFP_KERNEL);
 	if (!pages) {
 		pr_err("failed to allocate page array\n");
 		return -ENOMEM;
 	}
 
 	nr_allocated = 0;
-	nr_allocated = alloc_pages_bulk_array_node(GFP_KERNEL, node, npages, pages);
-	if (nr_allocated != npages) {
-		pr_err("bulk allocation failed: got %lu of %lu pages\n",
-			nr_allocated, npages);
-		ret = -ENOMEM;
-		goto err_free_pages;
+	while (nr_allocated < nr_pages) {
+		unsigned long nr_pages_bulk_allocated, nr_pages_request;
+
+		nr_pages_request = min(128UL, nr_pages - nr_allocated);
+		nr_pages_bulk_allocated = alloc_pages_bulk_array_node(GFP_KERNEL,
+				node, nr_pages_request, pages + nr_allocated);
+		nr_allocated += nr_pages_bulk_allocated;
+		cond_resched();
+
+		if (nr_pages_bulk_allocated != nr_pages_request) {
+			pr_debug("bulk allocation failed: got %lu pages, %lu pages requested."
+				" %lu pages allocated by bulk_allocator.\n", nr_pages_bulk_allocated,
+				nr_pages_request, nr_allocated);
+			break;
+		}
 	}
 
-	ret = map_pages_to_vma(vma, pages, size, get_pgprot(g_prot));
+	while (nr_allocated < nr_pages) {
+		/* As an optimization, we can first try high-order pages. This is not done for
+		 * simplicity. */
+		struct page *p;
+
+		p = alloc_pages_node(node, GFP_KERNEL, 0);
+		if (!p) {
+			pr_err("fallback allocation failed at page[%lu].\n", nr_allocated);
+			ret = -ENOMEM;
+			goto err_free_pages;
+		}
+		pages[nr_allocated++] = p;
+	}
+
+	/* Apply protection to VMA's vm_page_prot in-place */
+	apply_pgprot(g_prot, &vma->vm_page_prot);
+	ret = map_pages_to_vma(vma, pages, size, vma->vm_page_prot);
 	if (ret) {
 		pr_err("failed to map pages: %d\n", ret);
 		goto err_free_pages;
@@ -265,7 +293,7 @@ static int memdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	region->user_va = vma->vm_start;
 	region->size = size;
 	region->pages = pages;
-	region->npages = npages;
+	region->nr_pages = nr_pages;
 	INIT_LIST_HEAD(&region->list);
 
 	mutex_lock(&dev_lock);
@@ -306,11 +334,7 @@ static int __init memdev_init(void)
 {
 	int ret;
 
-#ifdef CONFIG_NUMA
-	numa_enabled = (num_possible_nodes() > 1);
-#else
-	numa_enabled = false;
-#endif
+	numa_enabled = IS_ENABLED(CONFIG_NUMA) && (num_possible_nodes() > 1);
 
 	if (strcmp(memdev_attr, "normal_cacheable") == 0) {
 		g_prot = PROT_CACHEABLE;
